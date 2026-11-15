@@ -1,11 +1,15 @@
-const socket = io();
+// The Wi-Fi server, or online through a room code — see transport.js.
+const socket = connectGame();
 
 // A quiet on-screen build tag (see .build-stamp in station.html) so a
-// future bug report can say "yes, this is really v0.26" — bump this
+// future bug report can say "yes, this is really v0.27" — bump this
 // alongside the version-history entry in the project notes each round.
-const STATION_BUILD = "station v0.26";
+const STATION_BUILD = "station v0.27";
 const buildStampEl = document.getElementById("buildStamp");
-if (buildStampEl) buildStampEl.textContent = STATION_BUILD;
+function renderBuildStamp() {
+  if (buildStampEl) buildStampEl.textContent = STATION_BUILD + (socket.room ? " · room " + socket.room : "");
+}
+renderBuildStamp();
 
 // Must match server.js's PIN_LENGTH — the keypad below reads this off the
 // number of .pin-dot elements markup actually provides (see buildKeypad),
@@ -197,6 +201,40 @@ if (STANDALONE) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Room code (online only) — the 4 letters on the host's screen. Asked once;
+// the terminal remembers it, like its room.
+// ---------------------------------------------------------------------------
+function askForRoomCode() {
+  $("#roomCodeError").textContent = "";
+  $("#roomCodeInput").value = "";
+  show($("#overlay-roomCode"));
+  $("#roomCodeInput").focus();
+}
+function submitRoomCode() {
+  const code = IRLRoom.clean($("#roomCodeInput").value);
+  if (code.length !== 4) {
+    $("#roomCodeError").textContent = "Room codes are 4 letters.";
+    return;
+  }
+  hide($("#overlay-roomCode"));
+  if (socket.room) {
+    // Switching rooms: start clean rather than untangle the old game's state.
+    IRLRoom.remember(code);
+    const url = new URL(location.href);
+    url.searchParams.set("room", code);
+    location.replace(url);
+    return;
+  }
+  socket.joinRoom(code);
+  renderBuildStamp();
+  render();
+}
+$("#roomCodeBtn").addEventListener("click", submitRoomCode);
+$("#roomCodeInput").addEventListener("keydown", (e) => { if (e.key === "Enter") submitRoomCode(); });
+$("#changeRoomCodeBtn").addEventListener("click", askForRoomCode);
+if (socket.needsRoom && !STANDALONE) askForRoomCode();
+
 // "change" reassigns this terminal to a fresh auto-picked section — no
 // dropdown, no typing. The server does the picking (see
 // station:reassignSection in server.js).
@@ -369,6 +407,12 @@ function render() {
     hide($("#fixedActions"));
     hide($("#sabotageBanner"));
     hide($("#overlay-redalert"));
+    if (IRL_ONLINE) {
+      $("#connectingText").textContent = socket.room
+        ? `Connecting to room ${socket.room}… the host's page needs to be open.`
+        : "Enter the room code from the host's screen.";
+      $("#changeRoomCodeBtn").hidden = !socket.room;
+    }
     showPanel("noSectionPanel");
     return;
   }
@@ -634,7 +678,7 @@ function renderLoggedIn() {
     hide($("#loggedInNextOrder"));
     if ($("#stationFrame").dataset.instanceId !== outcome.task.instanceId) {
       $("#stationFrame").dataset.instanceId = outcome.task.instanceId;
-      $("#stationFrame").src = "/tasks/" + outcome.task.file + "?id=" + encodeURIComponent(outcome.task.instanceId);
+      $("#stationFrame").src = "tasks/" + outcome.task.file + "?id=" + encodeURIComponent(outcome.task.instanceId);
     }
   } else {
     hide($("#stationFrame"));
@@ -975,7 +1019,7 @@ function openPracticeTask(g) {
   $("#practiceTaskTitle").textContent = g.name;
   hide($("#practiceTaskDone"));
   show($("#practiceTaskFrameWrap"));
-  $("#practiceTaskFrame").src = "/tasks/" + g.file;
+  $("#practiceTaskFrame").src = "tasks/" + g.file;
   show($("#overlay-practiceTask"));
 }
 function practiceTaskComplete() {

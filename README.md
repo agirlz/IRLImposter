@@ -1,11 +1,39 @@
-# Amongus IRL
+# IRL Imposter
 
-A real-life Among Us party game server. There are **no personal phones** in
+A real-life Among Us–style party game. There are **no personal phones** in
 this design — every device is a stationary **station terminal** placed in
 one room of the house. Players walk up to whichever terminal is nearest to
 join, see their role, do a task, sabotage, call a Red Alert, declare someone
 dead, or vote. Everything syncs live across every terminal in real time. No
 accounts, no app installs — it all runs in a browser.
+
+## Two ways to play
+
+**Online (no installs):** open **https://agirlz.github.io/IRLImposter/**.
+One device taps **Host a game** and gets a 4-letter room code; every station
+phone taps **Join a game** and types it (or opens the station link the host
+screen shows). On Android, Chrome's menu → *Add to Home screen* makes it an
+icon. Every push to `main` republishes the site through GitHub Actions, so
+phones pick up changes the next time the page loads — nothing to reinstall.
+
+- The host's page **runs the game**: keep it open, plugged in, with the
+  screen on (it asks the screen to stay awake). If it closes, the round is
+  lost; reopening it keeps the same room code and stations reconnect.
+- Phones need internet. Supabase (the same project Upped uses) only relays
+  messages between them — this game stores nothing in its database.
+- Anyone with developer tools open on a station could read other players'
+  roles from those messages. Fine for a family party; not anti-cheat.
+
+**Offline (house Wi-Fi only):** run `npm start` on a laptop, or use the
+Android app, which runs the same server inside the host phone. The rest of
+this README describes that setup. Both use the same game rules
+(`public/game-core.js`) and pages.
+
+## Tests
+
+`npm test` runs the browser suites against the offline server (Microsoft
+Edge must be installed; no other download). `npm run test:online` plays a
+short game through the real Supabase relay and needs internet.
 
 ## How it works
 

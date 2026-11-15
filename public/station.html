@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>IRL Imposter — Station</title>
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="style.css">
 <style>
   body{ padding-bottom: 100px; transition: background 0.4s ease; }
 
@@ -37,6 +37,7 @@
   .room-grid .name-btn{ padding: 10px 6px; font-size: 14px; }
   .room-custom{ display: flex; gap: 8px; margin-top: 10px; }
   .room-custom input{ flex: 1; min-width: 0; }
+  .room-code-input{ text-align: center; text-transform: uppercase; font-size: 28px; letter-spacing: 0.3em; margin-top: 10px; }
 
   .section-badge{
     width: 108px; height: 108px; border-radius: 50%; margin: 6px auto 18px;
@@ -386,7 +387,8 @@
   <div class="section-sub" id="sectionSub"></div>
 
   <section class="panel mt" id="noSectionPanel" hidden>
-    <p class="hint center">Setting up this station…</p>
+    <p class="hint center" id="connectingText">Setting up this station…</p>
+    <button id="changeRoomCodeBtn" class="block mt" hidden>Use a different room code</button>
   </section>
 
   <section class="panel" id="standalonePanel" hidden>
@@ -515,6 +517,16 @@
 
 <div class="fixed-actions" id="fixedActions" hidden>
   <button id="redAlertBtn" hidden>🚨 Red Alert</button>
+</div>
+
+<div class="overlay" id="overlay-roomCode" hidden>
+  <div class="panel">
+    <h2>Enter the room code</h2>
+    <p class="hint">It's the 4 letters on the host's screen.</p>
+    <input type="text" id="roomCodeInput" class="room-code-input" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCD" aria-label="Room code">
+    <button id="roomCodeBtn" class="primary block mt">Join room</button>
+    <div id="roomCodeError" class="hint mt" style="color:var(--bad)"></div>
+  </div>
 </div>
 
 <div class="overlay" id="overlay-room" hidden>
@@ -678,8 +690,9 @@
   </div>
 </div>
 
-<script src="/socket.io/socket.io.js"></script>
-<script src="/client-common.js"></script>
-<script src="/station.js"></script>
+<script src="config.js"></script>
+<script src="transport.js"></script>
+<script src="client-common.js"></script>
+<script src="station.js"></script>
 </body>
 </html>

@@ -1,4 +1,6 @@
-const socket = io();
+// Offline this talks to server.js on the Wi-Fi; online, this tab runs the
+// game itself (see online-host.js).
+const socket = connectGame({ host: true });
 socket.emit("host:join");
 
 $("#joinHint").textContent = "Players join and play entirely from station terminals placed around the house — every device auto-assigns itself a room, so just open a station on each one and go.";
@@ -137,9 +139,21 @@ renderCustomSections();
 // ---- Game key: a short stand-in for the full LAN address ----
 // This page is itself reached at http://<this-device's-LAN-IP>:3000/host.html,
 // so location.hostname IS that address already — no server round-trip needed.
+// Online there's no address to share — just the room code, and this page has
+// to stay open because it's running the game.
 let lanPrefix = "";
 let lanCode = "";
+function stationUrl() {
+  return new URL("station.html" + (socket.online ? "?room=" + socket.room : ""), location.href).href;
+}
 function renderServerCode() {
+  if (socket.online) {
+    $("#serverCodeTitle").textContent = "Room Code";
+    $("#serverCodeHint").textContent = `Everyone opens ${new URL("station.html", location.href).href} on their phone and types this code. Keep this page open with the screen on — it's running the game.`;
+    $("#serverCodeValue").textContent = socket.room;
+    $("#serverCodePanel").hidden = false;
+    return;
+  }
   const host = location.hostname;
   const parts = host.split(".");
   if (parts.length !== 4 || parts.some((p) => !/^\d+$/.test(p))) return; // not a plain IPv4 host (e.g. "localhost")
@@ -158,7 +172,7 @@ let networkInfoOpen = false;
 function renderNetworkInfo() {
   const body = $("#networkInfoBody");
   body.innerHTML = "";
-  const url = location.origin + "/station.html";
+  const url = stationUrl();
   const row = document.createElement("div");
   row.className = "chip-row";
   row.innerHTML = `<span style="word-break:break-all;">${escapeHtml(url)}</span>`;
@@ -173,9 +187,11 @@ function renderNetworkInfo() {
   body.appendChild(row);
   const hint = document.createElement("p");
   hint.className = "hint";
-  hint.textContent = lanPrefix
-    ? `Full address: ${location.host}. Every station device uses this same address — the game key above is just a shortcut for it.`
-    : "Every station device uses this same address — the game key above is just a shortcut for it.";
+  hint.textContent = socket.online
+    ? "Opening this link on a phone joins this room directly, with no code to type."
+    : lanPrefix
+      ? `Full address: ${location.host}. Every station device uses this same address — the game key above is just a shortcut for it.`
+      : "Every station device uses this same address — the game key above is just a shortcut for it.";
   body.appendChild(hint);
 }
 $("#networkInfoToggle").addEventListener("click", () => {

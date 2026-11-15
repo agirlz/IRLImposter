@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>IRL Imposter — Host</title>
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="style.css">
 <style>
   body{ max-width: 720px; margin: 0 auto; }
   .wrap{ max-width: 640px; }
@@ -52,8 +52,8 @@
   </section>
 
   <section class="panel" id="serverCodePanel" hidden>
-    <h2>Game Key</h2>
-    <p class="hint">Give this to everyone joining — they enter it on the Join screen. Every device auto-assigns itself a room, so there's nothing else to coordinate.</p>
+    <h2 id="serverCodeTitle">Game Key</h2>
+    <p class="hint" id="serverCodeHint">Give this to everyone joining — they enter it on the Join screen. Every device auto-assigns itself a room, so there's nothing else to coordinate.</p>
     <div class="big-number" id="serverCodeValue" style="color:var(--accent)">---</div>
   </section>
 
@@ -110,8 +110,11 @@
   </section>
 </div>
 
-<script src="/socket.io/socket.io.js"></script>
-<script src="/client-common.js"></script>
-<script src="/host.js"></script>
+<script src="config.js"></script>
+<script src="transport.js"></script>
+<script src="game-core.js"></script>
+<script src="online-host.js"></script>
+<script src="client-common.js"></script>
+<script src="host.js"></script>
 </body>
 </html>
