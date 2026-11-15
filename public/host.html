@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IRL Imposter — Host</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  body{ max-width: 720px; margin: 0 auto; }
+  .wrap{ max-width: 640px; }
+  select{
+    width: 100%;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    background: var(--seam);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 10px 12px;
+  }
+  .check-row{
+    display: flex; align-items: center; gap: 10px;
+    background: var(--seam); border-radius: 8px; padding: 10px 12px;
+    font-size: 13.5px; cursor: pointer;
+  }
+  .check-row input{ width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; }
+  .chip-row{
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    background: var(--seam); border-radius: 8px; padding: 9px 12px; font-size: 13.5px;
+  }
+  .chip-row button{ padding: 4px 10px; font-size: 11px; }
+  #serverCodeValue{ letter-spacing: 0.15em; }
+  .row input[type="text"]{ flex: 1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">IRL Imposter</div>
+  <h1 class="title">Host Dashboard</h1>
+
+  <section class="panel">
+    <div class="row">
+      <h2 style="margin:0">Status</h2>
+      <span class="pill" id="phasePill"><span class="dot"></span><span id="phaseText">Lobby</span></span>
+    </div>
+    <p class="hint mt" id="joinHint"></p>
+  </section>
+
+  <section class="panel" id="lobbyPanel">
+    <h2>Players</h2>
+    <ul class="player-list" id="playerList"></ul>
+  </section>
+
+  <section class="panel" id="serverCodePanel" hidden>
+    <h2>Game Key</h2>
+    <p class="hint">Give this to everyone joining — they enter it on the Join screen. Every device auto-assigns itself a room, so there's nothing else to coordinate.</p>
+    <div class="big-number" id="serverCodeValue" style="color:var(--accent)">---</div>
+  </section>
+
+  <section class="panel" id="sectionsPanel">
+    <h2>Sections (rooms)</h2>
+    <p class="hint">One task station goes in each room below — players must physically move between them. Electrical and Reactor are always included (that's where Lights Out and Reactor Meltdown get fixed). Tap to toggle any others, or add your own.</p>
+    <div id="fixedSections" class="stack mt"></div>
+    <div id="presetSections" class="stack mt"></div>
+    <div class="row mt">
+      <input type="text" id="customSectionInput" placeholder="Add a custom section" maxlength="30">
+      <button id="addCustomSectionBtn">Add</button>
+    </div>
+    <div id="customSectionsList" class="stack mt"></div>
+    <button id="saveSectionsBtn" class="block mt">Save Sections</button>
+    <div id="sectionsError" class="hint mt" style="color:var(--bad)"></div>
+  </section>
+
+  <section class="panel" id="networkInfoPanel">
+    <button id="networkInfoToggle" class="block" style="text-align:left">▸ Network info</button>
+    <div id="networkInfoBody" class="stack mt" hidden></div>
+  </section>
+
+  <section class="panel" id="startPanel">
+    <button id="startBtn" class="primary block">Start Round</button>
+    <p class="hint mt" id="roundSectionsHint"></p>
+    <div id="startError" class="hint mt" style="color:var(--bad)"></div>
+  </section>
+
+  <section class="panel" id="progressPanel" hidden>
+    <h2>Crew progress</h2>
+    <div class="progress-bar"><div id="overallBar" style="width:0%"></div></div>
+    <p class="hint" id="overallText"></p>
+    <ul class="player-list" id="progressList"></ul>
+  </section>
+
+  <section class="panel" id="sabotagePanel" hidden>
+    <h2 id="sabotageTitle">Sabotage</h2>
+    <div class="countdown" id="sabotageCountdown">--</div>
+    <p class="hint center" id="sabotageNeed"></p>
+  </section>
+
+  <section class="panel" id="meetingPanel" hidden>
+    <h2 id="meetingTitle">Meeting</h2>
+    <div class="countdown" id="meetingCountdown">--</div>
+    <p class="hint center" id="meetingSub"></p>
+    <button id="skipMeetingBtn" class="block mt">Skip to next phase</button>
+  </section>
+
+  <section class="panel" id="gameoverPanel" hidden>
+    <h2 id="gameoverTitle">Game Over</h2>
+    <p class="hint" id="gameoverReason"></p>
+    <ul class="player-list" id="gameoverReveal"></ul>
+    <button id="resetBtn" class="block mt">Reset for a new round</button>
+  </section>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/client-common.js"></script>
+<script src="/host.js"></script>
+</body>
+</html>

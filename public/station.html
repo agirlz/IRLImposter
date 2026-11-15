@@ -1,0 +1,685 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>IRL Imposter — Station</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  body{ padding-bottom: 100px; transition: background 0.4s ease; }
+
+  /* --- Per-section color identity: a thick border + translucent tint that
+     changes with whichever section this terminal auto-assigned itself to.
+     Defaults to the amber accent until JS applies the real section's theme. */
+  :root{
+    --section-color: var(--accent);
+    --section-rgb: 255,176,32;
+  }
+  body.themed{
+    border: 6px solid var(--section-color);
+    box-shadow: inset 0 0 70px rgba(var(--section-rgb), 0.14);
+    background: radial-gradient(ellipse 1000px 700px at 50% 0%, rgba(var(--section-rgb),0.16) 0%, var(--stage) 62%);
+  }
+
+  .section-title{
+    font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 30px;
+    letter-spacing: 0.04em; text-transform: uppercase; text-align: center;
+    margin: 4px 0 4px; color: #f4f6f8; text-wrap: balance;
+    text-shadow: 0 0 20px rgba(var(--section-rgb), 0.45);
+  }
+  .section-row{ display:flex; align-items:center; justify-content:center; gap:8px; }
+  #changeSectionBtn, #roomBtn{ font-size: 10px; padding: 4px 9px; }
+  .section-sub{ font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; text-align: center; color: var(--section-color); margin-bottom: 8px; }
+  .section-sub:empty{ display: none; }
+
+  /* --- Room picker: one tap per device, so it has to fit without scrolling --- */
+  .room-grid{ display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .room-grid .name-btn{ padding: 10px 6px; font-size: 14px; }
+  .room-custom{ display: flex; gap: 8px; margin-top: 10px; }
+  .room-custom input{ flex: 1; min-width: 0; }
+
+  .section-badge{
+    width: 108px; height: 108px; border-radius: 50%; margin: 6px auto 18px;
+    border: 4px solid var(--section-color); background: rgba(var(--section-rgb), 0.14);
+    display: flex; align-items: center; justify-content: center; font-size: 48px;
+    box-shadow: 0 0 24px rgba(var(--section-rgb), 0.28), inset 0 0 16px rgba(var(--section-rgb), 0.15);
+  }
+
+  /* --- PIN keypad (shared look for the idle login screen and the
+     confirm-it's-you prompt overlay) — big on-screen number buttons instead
+     of a text keyboard, per James's request. Every press vibrates + beeps
+     (see pressKey() in station.js). --- */
+  .pin-dots{ display: flex; justify-content: center; gap: 14px; margin: 6px 0 22px; }
+  .pin-dot{ width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--section-color); transition: background 0.1s; }
+  .pin-dot.filled{ background: var(--section-color); box-shadow: 0 0 8px rgba(var(--section-rgb),0.6); }
+  .pin-dots.error .pin-dot{ border-color: var(--bad); animation: pinShake 0.35s; }
+  @keyframes pinShake{ 0%,100%{ transform: translateX(0); } 25%{ transform: translateX(-6px); } 75%{ transform: translateX(6px); } }
+
+  .keypad{ width: 100%; max-width: 300px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .key{
+    height: 58px; border-radius: 12px;
+    background: linear-gradient(180deg, #333c4a, #232833);
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 2px 0 rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Rajdhani', sans-serif; font-weight: 600; font-size: 24px; color: var(--text);
+  }
+  .key.func{ font-size: 16px; color: var(--text-dim); }
+  .key.empty{ background: transparent; border: none; box-shadow: none; }
+  .key:active{ transform: translateY(1px); }
+
+  .idle-hint{ text-align: center; margin-top: 16px; }
+  .idle-error{ text-align: center; color: var(--bad); min-height: 16px; margin-top: 10px; font-size: 12px; }
+
+  /* --- Front screen (pre-round lobby): join panel + Tutorial / Practice --- */
+  .joined-row{ display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+  .joined-chip{ font-size: 10.5px; padding: 4px 10px; border-radius: 999px; background: var(--seam); color: var(--text-dim); border: 1px solid rgba(255,255,255,0.08); }
+  .divider{ display: flex; align-items: center; gap: 10px; margin: 18px 0 14px; }
+  .divider span{ font-size: 9.5px; letter-spacing: 0.2em; color: var(--text-dim); text-transform: uppercase; white-space: nowrap; }
+  .divider .line{ flex: 1; height: 1px; background: rgba(255,255,255,0.1); }
+  .secondary-btn{ display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 10px; }
+  .secondary-btn .ic{ font-size: 18px; }
+  .secondary-btn.tutorial{ border-color: rgba(108,199,255,0.5); box-shadow: 0 0 14px rgba(108,199,255,0.12); }
+  .secondary-btn.practice{ border-color: rgba(184,146,255,0.5); box-shadow: 0 0 14px rgba(184,146,255,0.12); }
+
+  /* --- Lobby (post-join): roster + a preview of tonight's ship sections,
+     each tinted and iconed the same way its own terminal will be (see
+     SECTION_THEMES / themeFor() in station.js), so people start building a
+     mental map of "which color/icon is which room" before the round even
+     starts. --- */
+  .lobby-sections{ display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0 14px; }
+  .lobby-section-tile{
+    display: flex; align-items: center; gap: 10px; border-radius: 12px; padding: 10px 12px;
+    background: rgba(var(--tint-rgb,255,176,32), 0.12); border: 2px solid var(--tint, #ffb020);
+  }
+  .lobby-section-tile .lst-icon{ font-size: 22px; line-height: 1; }
+  .lobby-section-tile .lst-name{ font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 13px; letter-spacing: 0.02em; text-transform: uppercase; color: var(--tint, #ffb020); }
+  .lobby-section-tile .lst-name small{ display: block; font-size: 10px; font-weight: 600; opacity: 0.75; }
+
+  /* --- Illustrated role reveal --- */
+  .role-badge{ width: 168px; height: 168px; margin: 4px auto 14px; }
+  .role-title{ font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 26px; text-transform: uppercase; letter-spacing: 0.03em; text-align: center; margin: 0 0 10px; }
+  .role-title.crew{ color: var(--good); }
+  .role-title.impostor{ color: var(--bad); }
+  .role-cover{ padding: 14px 0; }
+  .role-cover .ic{ font-size: 48px; line-height: 1; margin-bottom: 8px; }
+
+  /* Press-and-hold control: looks identical for crew and Impostor. touch-action
+     and the fill keep a long press from scrolling and show it's working. */
+  .peek-btn{ width: 100%; margin-top: 10px; padding: 12px; font-size: 12px; user-select: none; touch-action: none; background: var(--seam); }
+  .peek-btn.holding{ box-shadow: inset 0 0 0 2px var(--section-color); }
+
+  /* --- Logged-in (welcome + task) screen --- */
+  .welcome-line{ font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 24px; text-align: center; margin: 0 0 10px; text-wrap: balance; }
+  .task-eyebrow{ font-size: 10.5px; letter-spacing: 0.2em; color: var(--text-dim); text-transform: uppercase; text-align: center; margin-bottom: 4px; }
+  .task-line{ font-size: 14.5px; line-height: 1.5; text-align: center; margin: 0 0 16px; }
+  /* Some real tasks (Power Cycle, Steady Hand) are drag/hold mini-games
+     that deliberately block touch-scroll inside their own iframe, same as
+     the practice versions. If that iframe were tall enough to fill the
+     whole screen, Sabotage/Log Out below it could end up unreachable —
+     nothing outside the iframe left to touch-scroll with. Fix: the whole
+     logged-in panel gets a height budget and lays out as a column where
+     only the task area flexes/shrinks to fit; the buttons are fixed-size
+     siblings that are never squeezed out of that budget. */
+  /* Each height is written twice: older Android WebViews don't know dvh and
+     would otherwise drop the rule entirely. */
+  #loggedInPanel{ display: flex; flex-direction: column; max-height: calc(100vh - 224px); max-height: calc(100dvh - 224px); overflow: hidden; }
+  /* A running task gets all the height there is. */
+  #loggedInPanel.tasking{ height: calc(100vh - 224px); height: calc(100dvh - 224px); }
+  #loggedInPanel.tasking .welcome-line, #loggedInPanel.tasking .task-eyebrow{ display: none; }
+  #welcomeLine, #taskEyebrow, #taskLine, .next-order, .logged-actions{ flex: none; }
+  .task-content{ flex: 1 1 auto; min-height: 180px; background: var(--seam); border-radius: 14px; border: 1px solid rgba(255,255,255,0.08); overflow: hidden; display: flex; flex-direction: column; }
+  .logged-actions{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .logged-actions .logout-btn, .logged-actions .peek-btn{ flex: 1 1 0; width: auto; margin-top: 0; }
+  .logged-actions .logout-btn.urgent, .logout-warning{ flex: 1 0 100%; }
+  .task-content-msg{ flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 20px; text-align: center; }
+  .task-content-msg .ic{ font-size: 40px; opacity: 0.85; }
+  #stationFrame{ width: 100%; flex: 1 1 auto; min-height: 0; border: 0; display: block; background: var(--seam); }
+  .sabotage-btn{
+    width: 100%; margin-top: 14px;
+    background: linear-gradient(180deg, #ffc861, var(--accent)); color: #241a05; border-color: #a5760f;
+    box-shadow: 0 0 18px rgba(255,176,32,0.3);
+  }
+  .logout-btn{ width: 100%; margin-top: 10px; }
+  .logout-btn.urgent{
+    padding: 16px 10px; background: linear-gradient(180deg, #ff7a7a, var(--bad)); color: #2a0505; border-color: #a52a2a;
+    font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 28px; letter-spacing: 0.04em; line-height: 1.1;
+    animation: logoutPulse 1.2s ease-in-out infinite;
+  }
+  @keyframes logoutPulse{ 0%, 100%{ box-shadow: 0 0 6px rgba(255,82,82,0.4); } 50%{ box-shadow: 0 0 26px rgba(255,82,82,0.9); } }
+  @media (prefers-reduced-motion: reduce){ .logout-btn.urgent{ animation: none; } }
+  .logout-warning{ text-align: center; font-size: 12px; font-weight: 700; color: var(--bad); }
+
+  /* --- Sabotage picker: icon tiles, color-matched to the corner badges --- */
+  .sabotage-tile{
+    display: flex; align-items: center; gap: 16px; border-radius: 16px; padding: 16px; cursor: pointer;
+    background: rgba(255,255,255,0.03); border: 2px solid transparent;
+  }
+  .sabotage-tile .tile-icon{ width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px; flex-shrink: 0; }
+  .sabotage-tile .tile-text{ flex: 1; text-align: left; }
+  .sabotage-tile .tile-name{ font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 16px; letter-spacing: 0.03em; text-transform: uppercase; }
+  .sabotage-tile .tile-desc{ font-size: 10.5px; color: var(--text-dim); margin-top: 2px; }
+  .sabotage-tile.minor{ border-color: #ffb020; background: rgba(255,176,32,0.1); }
+  .sabotage-tile.minor .tile-icon{ background: rgba(255,176,32,0.2); }
+  .sabotage-tile.minor .tile-name{ color: #ffb020; }
+  .sabotage-tile.critical{ border-color: #ff5252; background: rgba(255,82,82,0.12); }
+  .sabotage-tile.critical .tile-icon{ background: rgba(255,82,82,0.2); }
+  .sabotage-tile.critical .tile-name{ color: #ff5252; }
+
+  /* --- Tutorial slides --- */
+  .tutorial-cards{ display: flex; gap: 10px; margin: 10px 0 16px; }
+  .tutorial-card{ flex: 1; border-radius: 14px; padding: 14px 10px; text-align: center; display: flex; flex-direction: column; align-items: center; }
+  .tutorial-card.crew{ background: rgba(61,220,132,0.1); border: 2px solid var(--good); }
+  .tutorial-card.impostor{ background: rgba(255,82,82,0.1); border: 2px solid var(--bad); }
+  .tutorial-card .tc-icon{ width: 64px; height: 64px; margin-bottom: 8px; }
+  .tutorial-card .tc-label{ font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 13px; letter-spacing: 0.03em; text-transform: uppercase; margin-bottom: 4px; }
+  .tutorial-card.crew .tc-label{ color: var(--good); }
+  .tutorial-card.impostor .tc-label{ color: var(--bad); }
+  .tutorial-card .tc-desc{ font-size: 10px; color: var(--text-dim); line-height: 1.4; }
+  .tutorial-sabotage-demo{
+    display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 10px;
+    background: linear-gradient(180deg, #ffc861, var(--accent)); color: #241a05; border-radius: 10px; padding: 14px;
+    font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .tutorial-options{ display: flex; gap: 10px; margin: 10px 0 14px; }
+  .tutorial-opt{ flex: 1; border-radius: 12px; padding: 12px 8px; text-align: center; }
+  .tutorial-opt.minor{ background: rgba(255,176,32,0.12); border: 2px solid #ffb020; }
+  .tutorial-opt.critical{ background: rgba(255,82,82,0.12); border: 2px solid #ff5252; }
+  .tutorial-opt .to-icon{ font-size: 28px; }
+  .tutorial-opt .to-name{ font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 12px; letter-spacing: 0.03em; text-transform: uppercase; margin-top: 4px; }
+  .tutorial-opt.minor .to-name{ color: #ffb020; }
+  .tutorial-opt.critical .to-name{ color: #ff5252; }
+  .tutorial-nav{ display: flex; justify-content: space-between; align-items: center; margin-top: 6px; gap: 8px; }
+  .tutorial-nav .secondary-btn{ margin-bottom: 0; flex: none; width: auto; }
+  .tutorial-dots{ display: flex; gap: 6px; }
+  .tutorial-dots span{ width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.2); }
+  .tutorial-dots span.on{ background: var(--focus); }
+
+  /* New multi-slide tutorial (v0.23): one big icon/emoji per slide instead
+     of bespoke art for every logistics slide, consistent with how the rest
+     of the app already leans on emoji for sections/tasks/sabotage. */
+  #overlay-tutorial .panel{ position: relative; }
+  .tutorial-close-btn{
+    position: absolute; top: 10px; right: 10px; font-size: 10px; padding: 6px 10px;
+    background: transparent; border: 1px solid rgba(255,255,255,0.15); opacity: 0.85;
+  }
+  .tutorial-icon-big{ font-size: 52px; text-align: center; margin: 4px 0 10px; line-height: 1; }
+  .tutorial-vertical-note{
+    display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 12px;
+    background: var(--seam); border-radius: 10px; padding: 10px 12px; font-size: 11px; color: var(--text-dim);
+  }
+
+  /* --- Practice games tile grid --- */
+  .practice-grid{ display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0 14px; }
+  .practice-tile{ height: 96px; border-radius: 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer; }
+  .practice-tile.wide{ grid-column: span 2; flex-direction: row; height: 70px; gap: 12px; }
+  .practice-tile .pt-icon{ font-size: 26px; }
+  .practice-tile .pt-name{ font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 12px; letter-spacing: 0.02em; text-transform: uppercase; text-align: center; }
+  .practice-tile.amber{ background: rgba(255,176,32,0.12); border: 2px solid #ffb020; } .practice-tile.amber .pt-name{ color:#ffb020; }
+  .practice-tile.cyan{ background: rgba(108,199,255,0.12); border: 2px solid #6cc7ff; } .practice-tile.cyan .pt-name{ color:#6cc7ff; }
+  .practice-tile.purple{ background: rgba(184,146,255,0.14); border: 2px solid #b892ff; } .practice-tile.purple .pt-name{ color:#b892ff; }
+  .practice-tile.green{ background: rgba(61,220,132,0.12); border: 2px solid #3ddc84; } .practice-tile.green .pt-name{ color:#3ddc84; }
+  .practice-tile.pink{ background: rgba(255,143,196,0.12); border: 2px solid #ff8fc4; } .practice-tile.pink .pt-name{ color:#ff8fc4; }
+  #practiceTaskFrame{ width: 100%; height: 100%; border: 0; display: block; background: var(--seam); border-radius: 10px; }
+  .practice-done{ text-align: center; padding: 24px 10px; }
+  .practice-done .pd-icon{ font-size: 40px; margin-bottom: 8px; }
+
+  .result-panel{ text-align: center; }
+  .result-panel .big-number{ font-size: 22px; margin: 10px 0; }
+
+  .fixed-actions{ position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 14px calc(10px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 8px; z-index: 40; background: linear-gradient(0deg, var(--stage) 55%, transparent); }
+  #redAlertBtn{ background: linear-gradient(180deg, #ff7a7a, var(--bad)); color: #2a0505; border-color: #a52a2a; font-size: 14px; padding: 14px; }
+
+  #sabotageBanner{ border: 1px solid var(--bad); }
+
+  .overlay .panel{ max-height: 94vh; overflow-y: auto; }
+
+  /* The practice-task overlay hosts a mini-game iframe that intentionally
+     blocks touch-scroll on itself (the drag/hold games need every touch),
+     so if that iframe alone were tall enough to fill the screen there'd be
+     no touchable area left to scroll to the Back button — it'd be stuck
+     off-screen. Fix: this panel gets a FIXED height budget (not just a
+     max) and lays out as a column where the iframe flexes to fill
+     whatever's left, but the Back button is a fixed-size sibling that's
+     never pushed out of that budget, so it's always on-screen and
+     tappable no matter how tall the game content is. */
+  .practice-task-panel{
+    height: 92vh; max-height: 92vh; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .practice-task-panel h2{ flex: none; }
+  #practiceTaskFrameWrap{ flex: 1 1 auto; min-height: 0; display: flex; }
+  #practiceTaskFrame{ flex: 1 1 auto; min-height: 0; }
+  .practice-done{ flex: none; }
+  #practiceTaskBackBtn{ flex: none; }
+  #overlay-redalert .eyebrow{ color: var(--bad); }
+  #redAlertCalledBy{ color: var(--bad); }
+  #redAlertCountdown{ color: var(--bad); text-shadow: 0 0 20px rgba(255,82,82,0.5); }
+
+  .confirm-box{ background: var(--seam); border-radius: 10px; padding: 12px; text-align: center; }
+  .confirm-box .row{ margin-top: 10px; }
+  .confirm-box .row button{ flex: 1; }
+
+  .console-box{ margin-bottom: 12px; }
+  .console-box h2{ font-size: 15px; }
+  .console-code{ font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 40px; text-align: center; letter-spacing: 0.12em; color: var(--accent); margin: 6px 0; }
+  .console-hold-btn{ width: 100%; padding: 22px; font-size: 15px; user-select: none; touch-action: none; }
+  .console-hold-btn.holding{ background: linear-gradient(180deg, #7affa0, var(--good)); color: #04240f; }
+  .console-hold-btn:disabled{ opacity: 0.4; }
+
+  .name-grid{ display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+  .name-btn{ font-size: 15px; padding: 16px; font-family: 'Rajdhani', sans-serif; font-weight: 600; letter-spacing: 0.03em; }
+  .name-btn.dim{ opacity: 0.4; }
+
+  .next-order{
+    margin-top: 14px; text-align: center; border-radius: 14px; padding: 16px 12px;
+    background: var(--seam); border: 1px solid rgba(255,176,32,0.4);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+  .next-order .eyebrow{ margin-bottom: 2px; }
+  .next-order-section{
+    font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 28px;
+    letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent);
+    text-shadow: 0 0 18px rgba(255,176,32,0.4); line-height: 1.15; text-wrap: balance;
+  }
+
+  .next-order-sub{ font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); margin-top: 2px; }
+  .next-order-sub:empty{ display: none; }
+
+  .corner-btn{ position: fixed; top: 10px; left: 10px; z-index: 30; font-size: 10px; padding: 6px 10px; opacity: 0.9; }
+
+  /* A quiet, always-present build tag — purely diagnostic. The native app
+     manually copies files into a separately-generated assets folder rather
+     than running a normal Cordova prepare (see the project notes), so a
+     delivered fix not "taking effect" is at least as likely to be a stale
+     copy on that side as a real bug — this makes it possible to just look
+     at the screen and confirm which build is actually running, instead of
+     guessing. Deliberately unobtrusive: bottom-right corner, small, dim. */
+  .build-stamp{
+    position: fixed; bottom: 4px; right: 6px; z-index: 5;
+    font-size: 8px; letter-spacing: 0.04em; color: rgba(255,255,255,0.22);
+    pointer-events: none; user-select: none;
+  }
+
+  .sabotage-corner{
+    position: fixed; top: 10px; right: 10px; z-index: 45;
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    background: rgba(10,12,16,0.9); border: 1px solid var(--bad);
+    border-radius: 12px; padding: 9px 11px 11px;
+    box-shadow: 0 0 18px rgba(255,82,82,0.4);
+  }
+  .sabotage-corner-icon{ font-size: 26px; line-height: 1; animation: sabotagePulse 1s ease-in-out infinite; }
+  .sabotage-corner-label{ font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--bad); text-align: center; max-width: 64px; }
+  .sabotage-corner-meter{ width: 10px; height: 44px; border-radius: 6px; background: var(--seam); overflow: hidden; display: flex; align-items: flex-end; box-shadow: inset 0 0 4px rgba(0,0,0,0.7); }
+  .sabotage-corner-meter-fill{ width: 100%; height: 100%; background: linear-gradient(0deg, var(--bad), #ff8a8a); }
+  @keyframes sabotagePulse{ 0%, 100%{ transform: scale(1); } 50%{ transform: scale(1.18); } }
+  .sabotage-corner.minor{ border-color: var(--accent); box-shadow: 0 0 18px rgba(255,176,32,0.35); }
+  .sabotage-corner.minor .sabotage-corner-label{ color: var(--accent); }
+  .sabotage-corner.minor .sabotage-corner-icon{ animation: none; }
+  .sabotage-corner.minor .sabotage-corner-meter-fill{ background: linear-gradient(0deg, var(--accent), #ffd27a); }
+  @media (prefers-reduced-motion: reduce){ .sabotage-corner-icon{ animation: none; } }
+
+  #sabotageConsoleBigIcon{ font-size: 42px; text-align: center; line-height: 1; margin-bottom: 2px; animation: sabotagePulse 1s ease-in-out infinite; }
+  #sabotageConsolePanel.reactor #sabotageConsoleTitle{ color: var(--bad); }
+  .console-box.officer{ border: 1px solid rgba(255,82,82,0.4); }
+  .console-box.officer h2{ color: var(--bad); font-size: 15px; letter-spacing: 0.08em; text-transform: uppercase; }
+
+  /* --- Lights Out blackout: takes over the WHOLE screen on every terminal
+     except Electrical's own (see render()'s "minor" sabotage branch) —
+     genuinely black, not just the plated panel look, so it actually reads
+     as "the power just went out" rather than another status card. --- */
+  .lights-out-panel{
+    background: #000; border-color: #000; box-shadow: none;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; min-height: 60vh; padding: 40px 20px;
+  }
+  .lights-out-panel .lo-icon{ font-size: 64px; line-height: 1; margin-bottom: 6px; animation: sabotagePulse 1s ease-in-out infinite; color: var(--accent); }
+  .lights-out-panel .lo-title{ color: var(--accent); margin: 4px 0 10px; }
+  .lights-out-panel .lo-text{ color: var(--text-dim); font-size: 14px; }
+  .lights-out-panel #lightsOutCountdown{ margin-top: 18px; }
+  @media (prefers-reduced-motion: reduce){ .lights-out-panel .lo-icon{ animation: none; } }
+
+  .dash-section{ margin-top: 14px; }
+  .dash-section h2{ font-family: 'Rajdhani', sans-serif; font-weight: 600; font-size: 15px; letter-spacing: 0.06em; text-transform: uppercase; margin: 0 0 8px; color: var(--accent); }
+  .chip-row{
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    background: var(--seam); border-radius: 8px; padding: 9px 12px; font-size: 13.5px;
+  }
+  .dash-pct{ font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 36px; text-align: center; letter-spacing: 0.04em; }
+
+  /* --- Keypad confirm-PIN overlay (used for vote self-ID, declare-dead
+     reporter-ID, sabotage claim-slot) --- */
+  #pinPromptKeypadWrap .pin-dots{ margin-bottom: 18px; }
+
+  /* Short screens: everything a player needs has to fit with no scrolling,
+     above the fixed Red Alert bar. */
+  @media (max-height: 640px){
+    body{ padding-top: 12px; padding-bottom: 76px; }
+    .section-sub{ margin-bottom: 4px; }
+    .panel{ padding: 12px 14px; }
+    #loggedInPanel{ max-height: calc(100vh - 176px); max-height: calc(100dvh - 176px); margin-bottom: 0; }
+    #loggedInPanel.tasking{ height: calc(100vh - 176px); height: calc(100dvh - 176px); }
+    .welcome-line{ font-size: 19px; margin-bottom: 4px; }
+    .task-line{ margin-bottom: 8px; font-size: 13px; }
+    .next-order{ margin-top: 8px; padding: 8px 12px; }
+    .role-cover{ padding: 4px 0; }
+    .role-badge{ width: 84px; height: 84px; margin-bottom: 4px; }
+    .role-title{ font-size: 20px; margin-bottom: 4px; }
+  }
+</style>
+</head>
+<body>
+<button id="dashboardBtn" class="corner-btn">📋 Dashboard</button>
+<div class="build-stamp" id="buildStamp"></div>
+<div class="sabotage-corner" id="sabotageCorner" hidden>
+  <div class="sabotage-corner-icon" id="sabotageCornerIcon">☢</div>
+  <div class="sabotage-corner-label" id="sabotageCornerLabel">Reactor</div>
+  <div class="sabotage-corner-meter"><div class="sabotage-corner-meter-fill" id="sabotageCornerFill"></div></div>
+</div>
+<div class="wrap">
+  <div class="eyebrow" id="eyebrow">Task Station</div>
+  <div class="section-row">
+    <div class="section-title" id="sectionName">—</div>
+    <button id="roomBtn" hidden>room</button>
+    <button id="changeSectionBtn" hidden>change</button>
+  </div>
+  <div class="section-sub" id="sectionSub"></div>
+
+  <section class="panel mt" id="noSectionPanel" hidden>
+    <p class="hint center">Setting up this station…</p>
+  </section>
+
+  <section class="panel" id="standalonePanel" hidden>
+    <h2>Learn to Play</h2>
+    <p class="hint">Get familiar with the game before anyone joins — nothing here affects a live round.</p>
+    <div class="stack mt">
+      <button id="standaloneTutorialBtn" class="secondary-btn tutorial block"><span class="ic">📖</span> View Tutorial</button>
+      <button id="standalonePracticeBtn" class="secondary-btn practice block"><span class="ic">🎮</span> Practice Games</button>
+    </div>
+  </section>
+
+  <section class="panel" id="lobbyPanel" hidden>
+    <div class="eyebrow">You're in</div>
+    <h2 style="text-align:center;margin-top:2px;" id="lobbyWelcome">Welcome, Player</h2>
+    <p class="hint center">Hang tight until the host starts the round — here's who else has joined and which rooms are in play tonight.</p>
+
+    <div class="divider mt"><div class="line"></div><span>Players joined</span><div class="line"></div></div>
+    <div class="joined-row" id="lobbyRoster"></div>
+
+    <div class="divider"><div class="line"></div><span>Ship sections</span><div class="line"></div></div>
+    <div class="lobby-sections" id="lobbySections"></div>
+
+    <div class="divider"><div class="line"></div><span>Before the round starts</span><div class="line"></div></div>
+    <button id="lobbyTutorialBtn" class="secondary-btn tutorial block"><span class="ic">📖</span> View Tutorial</button>
+    <button id="lobbyPracticeBtn" class="secondary-btn practice block"><span class="ic">🎮</span> Practice Games</button>
+
+    <button id="lobbyContinueBtn" class="primary block mt">Continue →</button>
+    <p class="hint center mt">Handing the terminal to someone else? Tap Continue — this brings back the Join screen for the next player.</p>
+  </section>
+
+  <section class="panel" id="frontScreenPanel" hidden>
+    <h2>Join the game</h2>
+    <p class="hint">Everyone joins from whichever terminal is nearest — there's no separate personal phone this round.</p>
+    <div class="stack mt">
+      <div>
+        <label for="joinNameInput">Your name</label>
+        <input type="text" id="joinNameInput" maxlength="24" placeholder="e.g. Alex" autocomplete="off">
+      </div>
+      <button id="joinBtn" class="primary block">Join</button>
+      <div id="joinError" class="hint" style="color:var(--bad)"></div>
+    </div>
+    <div class="joined-row" id="joinedList"></div>
+
+    <div class="divider"><div class="line"></div><span>Before the round starts</span><div class="line"></div></div>
+    <button id="viewTutorialBtn" class="secondary-btn tutorial block"><span class="ic">📖</span> View Tutorial</button>
+    <button id="practiceGamesBtn" class="secondary-btn practice block"><span class="ic">🎮</span> Practice Games</button>
+  </section>
+
+  <div id="sabotageBanner" class="panel" hidden>
+    <span class="hint" id="sabotageBannerText" style="color:var(--bad)"></span>
+  </div>
+
+  <section class="panel" id="sabotageConsolePanel" hidden>
+    <div id="sabotageConsoleBigIcon" hidden>☢</div>
+    <div class="row">
+      <h2 id="sabotageConsoleTitle" style="margin:0">Sabotage</h2>
+      <span class="pill dead"><span class="dot"></span><span id="sabotageConsoleCountdown">--</span></span>
+    </div>
+    <div id="sabotageSlots" class="mt"></div>
+    <div class="progress-bar mt" id="sabotageHoldBarWrap" hidden><div id="sabotageHoldBar" style="width:0%"></div></div>
+    <p class="hint center mt" id="sabotageHoldHint"></p>
+  </section>
+
+  <section class="panel lights-out-panel" id="lightsOutPanel" hidden>
+    <div class="lo-icon">⚡</div>
+    <h2 class="lo-title">Lights are out!</h2>
+    <p class="lo-text">Head to <b id="lightsOutPlace">Electrical</b> to fix it.</p>
+    <div class="countdown" id="lightsOutCountdown">--</div>
+  </section>
+
+  <section class="panel" id="idleLoginPanel" hidden>
+    <div class="section-badge" id="idleBadge">⚡</div>
+    <p class="hint center">Enter your 3-digit PIN</p>
+    <div class="pin-dots" id="loginPinDots">
+      <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+    </div>
+    <div class="keypad" id="loginKeypad"></div>
+    <div class="idle-error" id="loginError"></div>
+  </section>
+
+  <section class="panel result-panel" id="roleRevealPanel" hidden>
+    <div class="eyebrow" id="roleRevealEyebrow">Role Assigned</div>
+    <div class="role-cover" id="roleCover">
+      <div class="ic">🔒</div>
+      <p class="hint">Your role is hidden. Make sure nobody can see this screen.</p>
+    </div>
+    <div id="roleSecret" hidden>
+      <div class="role-badge" id="roleRevealBadge"></div>
+      <h2 class="role-title" id="roleRevealTitle"></h2>
+      <p class="hint" id="roleRevealText"></p>
+    </div>
+    <button id="roleHoldBtn" class="peek-btn">👆 Press and hold to see your role</button>
+    <button id="roleRevealContinueBtn" class="primary block mt">Let's Go</button>
+  </section>
+
+  <section class="panel" id="loggedInPanel" hidden>
+    <div class="welcome-line" id="welcomeLine">Welcome back, James.</div>
+    <div class="task-eyebrow" id="taskEyebrow">Your task</div>
+    <div class="task-line" id="taskLine"></div>
+    <div class="task-content" id="taskContent">
+      <iframe id="stationFrame" title="Task" hidden></iframe>
+      <div class="task-content-msg" id="taskContentMsg" hidden>
+        <div class="ic" id="taskContentMsgIcon">✅</div>
+        <div id="taskContentMsgText"></div>
+      </div>
+    </div>
+    <div class="next-order" id="loggedInNextOrder" hidden>
+      <div class="eyebrow">Your Next Assignment</div>
+      <div class="next-order-section" id="loggedInNextSection">—</div>
+      <div class="next-order-sub" id="loggedInNextSub"></div>
+    </div>
+    <div class="logged-actions">
+      <button id="logoutBtn" class="logout-btn">🔒 Log Out</button>
+      <div class="logout-warning" id="logoutWarning" hidden>Anyone can read this screen</div>
+      <button id="privateHoldBtn" class="peek-btn">👆 Private (hold)</button>
+    </div>
+  </section>
+
+  <section class="panel" id="gameOverPanel" hidden>
+    <h2 id="gameOverTitle">Game Over</h2>
+    <p class="hint" id="gameOverReason"></p>
+    <ul class="player-list" id="gameOverReveal"></ul>
+    <p class="hint center mt">Ask the host to reset for a new round.</p>
+  </section>
+</div>
+
+<div class="fixed-actions" id="fixedActions" hidden>
+  <button id="redAlertBtn" hidden>🚨 Red Alert</button>
+</div>
+
+<div class="overlay" id="overlay-room" hidden>
+  <div class="panel">
+    <h2>Where is this screen?</h2>
+    <p class="hint">Tap the room it's in. It'll remember for next time.</p>
+    <div class="room-grid" id="roomGrid"></div>
+    <div class="room-custom">
+      <input type="text" id="roomCustomInput" maxlength="24" placeholder="Another room…" autocomplete="off" aria-label="Another room">
+      <button id="roomCustomBtn">Save</button>
+    </div>
+    <button id="roomSkipBtn" class="block mt">Skip for now</button>
+  </div>
+</div>
+
+<div class="overlay" id="overlay-private" hidden>
+  <div class="panel">
+    <div class="eyebrow">Private</div>
+    <h2 class="role-title" id="privateRole"></h2>
+    <p class="hint center" id="privateNote"></p>
+    <button id="sabotageFab" class="sabotage-btn" hidden>💥 Sabotage</button>
+    <button id="privateCloseBtn" class="block mt">Hide</button>
+  </div>
+</div>
+
+<div class="overlay" id="overlay-sabotagePicker" hidden>
+  <div class="panel">
+    <h2>Sabotage</h2>
+    <p class="hint">Pick one — there's a shared cooldown between sabotages.</p>
+    <div class="stack mt" id="sabotageKindList"></div>
+    <div id="sabotagePickerError" class="hint mt" style="color:var(--bad)"></div>
+    <button id="sabotagePickerCancelBtn" class="block mt">Cancel</button>
+  </div>
+</div>
+
+<div class="overlay siren" id="overlay-redalert" hidden>
+  <div class="panel">
+    <div class="eyebrow">🚨 Red Alert</div>
+    <h2 id="redAlertCalledBy">—</h2>
+    <div class="countdown" id="redAlertCountdown">--</div>
+    <p class="hint center" id="redAlertPhaseText"></p>
+
+    <div id="declareDeadSection" class="mt">
+      <h2>Declare someone dead</h2>
+      <p class="hint" id="declareDeadHint">If you found a body, tap your own name first, then theirs. This is final.</p>
+      <div class="name-grid" id="declareDeadGrid"></div>
+      <div id="declareDeadError" class="hint mt" style="color:var(--bad)"></div>
+    </div>
+
+    <div id="voteSection" class="mt" hidden>
+      <h2>Cast your vote</h2>
+      <p class="hint" id="voteHint">Tap your own name to vote.</p>
+      <div class="name-grid" id="voteNameGrid"></div>
+      <div id="voteTargetWrap" class="mt" hidden>
+        <p class="hint" id="voteTargetHint"></p>
+        <div class="name-grid" id="voteTargetGrid"></div>
+      </div>
+      <div id="voteError" class="hint mt" style="color:var(--bad)"></div>
+    </div>
+
+    <div id="resultsSection" class="mt" hidden>
+      <h2>Results</h2>
+      <p class="hint center" id="resultsText"></p>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay-pin" hidden>
+  <div class="panel">
+    <h2 id="pinPromptTitle">Enter your PIN</h2>
+    <p class="hint" id="pinPromptHint">This confirms it's really you.</p>
+    <div id="pinPromptKeypadWrap"></div>
+    <div id="pinPromptError" class="idle-error"></div>
+    <button id="pinPromptCancelBtn" class="block mt">Cancel</button>
+  </div>
+</div>
+
+<div class="overlay" id="overlay-dashboard" hidden>
+  <div class="panel" style="max-height: 88vh; overflow-y: auto;">
+    <div class="row">
+      <h2 style="margin:0">Dashboard</h2>
+      <span class="pill" id="dashPhasePill"><span class="dot"></span><span id="dashPhaseText">Lobby</span></span>
+    </div>
+    <p class="hint mt">Read-only — anyone can check progress from here. Sections, sabotage locations, and starting/resetting the round are still set up from the host screen.</p>
+
+    <div class="dash-section" id="dashSabotageBlock" hidden>
+      <h2 id="dashSabotageTitle">Sabotage</h2>
+      <div class="countdown" id="dashSabotageCountdown">--</div>
+      <p class="hint center" id="dashSabotageNeed"></p>
+    </div>
+
+    <div class="dash-section" id="dashMeetingBlock" hidden>
+      <h2 id="dashMeetingTitle">Meeting</h2>
+      <div class="countdown" id="dashMeetingCountdown">--</div>
+      <p class="hint center" id="dashMeetingSub"></p>
+    </div>
+
+    <div class="dash-section" id="dashProgressBlock" hidden>
+      <h2>Crew progress</h2>
+      <div class="dash-pct" id="dashOverallPct">0%</div>
+      <div class="progress-bar"><div id="dashOverallBar" style="width:0%"></div></div>
+      <p class="hint center" id="dashOverallText"></p>
+    </div>
+
+    <div class="dash-section">
+      <h2>Sections</h2>
+      <div id="dashStaffingList" class="stack"></div>
+    </div>
+
+    <div class="dash-section">
+      <h2>Players</h2>
+      <ul class="player-list" id="dashPlayerList"></ul>
+    </div>
+
+    <button id="dashboardCloseBtn" class="block mt">Close</button>
+  </div>
+</div>
+
+<div class="overlay" id="overlay-pinReveal" hidden>
+  <div class="panel">
+    <div class="eyebrow">Welcome, <span id="pinRevealName"></span></div>
+    <h2>Your PIN</h2>
+    <div class="pin-display" id="pinRevealValue" style="font-family:'Rajdhani',sans-serif;font-weight:700;font-size:46px;text-align:center;letter-spacing:0.15em;color:var(--accent);margin:10px 0;">---</div>
+    <p class="hint center">You'll need to enter this every time on any station terminal tonight — for tasks, sabotage, voting, all of it. Nobody else can act as you without it, so it's what keeps anyone from peeking at who the Impostor is.</p>
+    <p class="hint center">Don't have a good memory for numbers? Jot it down on a scrap of paper now — there's no "forgot PIN" link, just ask the host to reset it for you if you lose it.</p>
+    <button id="pinRevealContinueBtn" class="primary block mt">Got it</button>
+  </div>
+</div>
+
+<div class="overlay" id="overlay-tutorial" hidden>
+  <div class="panel">
+    <button class="corner-btn tutorial-close-btn" id="tutorialCloseBtn" aria-label="Close tutorial">✕ Close</button>
+    <div class="eyebrow" id="tutorialEyebrow">Tutorial · 1 of 7</div>
+    <div id="tutorialSlideBody"></div>
+    <div class="tutorial-nav">
+      <button id="tutorialBackBtn" class="secondary-btn" hidden>← Back</button>
+      <div class="tutorial-dots" id="tutorialDots"></div>
+      <button id="tutorialNextBtn" class="primary">Next →</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay-practice" hidden>
+  <div class="panel">
+    <h2>Practice Games</h2>
+    <p class="hint">Free play — try any task before the round starts. Nothing here affects the real game.</p>
+    <div class="practice-grid" id="practiceGrid"></div>
+    <button id="practiceCloseBtn" class="block">← Back</button>
+  </div>
+</div>
+
+<div class="overlay" id="overlay-practiceTask" hidden>
+  <div class="panel practice-task-panel">
+    <h2 id="practiceTaskTitle" hidden>Practice</h2>
+    <div id="practiceTaskFrameWrap"><iframe id="practiceTaskFrame" title="Practice task"></iframe></div>
+    <div class="practice-done" id="practiceTaskDone" hidden>
+      <div class="pd-icon">✅</div>
+      <div>Nice work!</div>
+    </div>
+    <button id="practiceTaskBackBtn" class="block mt">← Back to games</button>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/client-common.js"></script>
+<script src="/station.js"></script>
+</body>
+</html>

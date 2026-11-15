@@ -1,0 +1,822 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conduit Patch</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  :root{
+    --stage: #12151b;
+    --plate: #1f2530;
+    --plate-hi: #2a3140;
+    --plate-lo: #171b23;
+    --seam: #0a0c10;
+    --metal: #4a5568;
+    --metal-lit: #8a94a6;
+    --text: #dde3ea;
+    --text-dim: #8791a1;
+    --accent: #ffb020;
+    --accent-dim: #7a5a20;
+    --bad: #ff5252;
+    --focus: #6cc7ff;
+  }
+
+  *{ box-sizing: border-box; }
+
+  html, body{
+    background: var(--stage);
+    color: var(--text);
+    margin: 0;
+  }
+
+  /* This task is loaded into a flexible iframe (the real station's task
+     area, or the Practice Games viewer) whose available height varies by
+     device — the SVG board used to size itself purely from its own width
+     (height:auto, driven by the 400x460 viewBox's aspect ratio), so on a
+     narrower iframe the resulting height could exceed what was actually
+     available, cutting the bottom ports off the screen with no way to
+     scroll to them (the board's touch-action:none, needed for dragging
+     wires, leaves nothing else touchable to scroll with — the same class
+     of bug fixed elsewhere by pinning controls outside a touch-capturing
+     iframe). Fix: the whole page is exactly one viewport tall with no
+     scroll at all, .terminal is a fixed-height flex column, and the board
+     itself is told to fill whatever height that leaves (see svg#board
+     below) so the SVG's own preserveAspectRatio scales it down to fit BOTH
+     dimensions — never cut off, never needing a scroll, on any screen. */
+  html, body{ height: 100%; overflow: hidden; }
+  body{
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px 14px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    background:
+      radial-gradient(ellipse 900px 600px at 50% 0%, #1b212b 0%, var(--stage) 62%);
+  }
+
+  .stage-note{
+    position: fixed;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    color: #4d5563;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+
+  .terminal{
+    position: relative;
+    width: 100%;
+    max-width: 408px;
+    height: 100%;
+    max-height: 100%;
+    display: flex;
+    flex-direction: column;
+    background:
+      linear-gradient(155deg, var(--plate-hi), var(--plate) 40%, var(--plate-lo) 100%);
+    border-radius: 22px;
+    padding: 20px 18px 18px;
+    box-shadow:
+      0 30px 60px -20px rgba(0,0,0,0.65),
+      0 2px 0 rgba(255,255,255,0.04) inset,
+      0 -30px 50px -30px rgba(0,0,0,0.5) inset;
+    border: 1px solid #0d1015;
+  }
+  /* Fixed-size siblings, never squeezed — only .board-wrap below flexes. */
+  .header, .panel-strip, .footer, .status-line{ flex: none; }
+
+  .bolt{
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, var(--metal-lit), var(--metal) 55%, #222834 100%);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.08), 0 2px 3px rgba(0,0,0,0.6);
+  }
+  .bolt::after{
+    content: "";
+    position: absolute;
+    top: 50%; left: 15%;
+    width: 70%; height: 1.5px;
+    background: #1a1f28;
+    transform: translateY(-50%) rotate(28deg);
+  }
+  .bolt.tl{ top: 12px; left: 12px; }
+  .bolt.tr{ top: 12px; right: 12px; }
+  .bolt.bl{ bottom: 12px; left: 12px; }
+  .bolt.br{ bottom: 12px; right: 12px; }
+
+  .header{
+    text-align: center;
+    padding: 4px 20px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    margin-bottom: 14px;
+  }
+  .eyebrow{
+    font-size: 10.5px;
+    letter-spacing: 0.32em;
+    color: var(--accent);
+    text-transform: uppercase;
+    opacity: 0.85;
+  }
+  .title{
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 700;
+    font-size: 30px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text);
+    margin-top: 2px;
+    text-wrap: balance;
+    text-shadow: 0 0 18px rgba(255,176,32,0.12);
+  }
+  .subtitle{
+    font-size: 10.5px;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    margin-top: 3px;
+  }
+
+  .row{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .panel-strip{
+    background: var(--seam);
+    border-radius: 10px;
+    padding: 9px 12px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.05), inset 0 1px 4px rgba(0,0,0,0.6);
+  }
+
+  .difficulty{
+    display: flex;
+    gap: 6px;
+  }
+  .diff-label{
+    font-size: 9.5px;
+    color: var(--text-dim);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+  .diff-btn{
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: #171b23;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .diff-btn:hover{ border-color: rgba(255,255,255,0.2); }
+  .diff-btn:focus-visible{ outline: 2px solid var(--focus); outline-offset: 2px; }
+  .diff-btn[aria-pressed="true"]{
+    background: var(--accent);
+    color: #241a05;
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+
+  .leds{
+    display: flex;
+    gap: 7px;
+  }
+  .led{
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #2c3340;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.6);
+    transition: box-shadow 0.25s, background 0.25s;
+  }
+  .led.lit{
+    box-shadow: 0 0 8px 1px var(--lc, #fff), 0 0 2px var(--lc, #fff);
+    background: var(--lc, #fff);
+  }
+
+  .board-wrap{
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    border-radius: 14px;
+    background: var(--seam);
+    box-shadow: inset 0 2px 10px rgba(0,0,0,0.65), inset 0 -1px 0 rgba(255,255,255,0.04);
+    overflow: hidden;
+    display: flex;
+  }
+
+  /* width/height 100% (not the old height:auto) hands the SVG the whole
+     flexible box above, both axes — its default preserveAspectRatio
+     ("xMidYMid meet") then scales the 400x460 viewBox down to fit whichever
+     dimension is tighter, so it's never taller than what's actually
+     available no matter how short a device's iframe turns out to be. */
+  svg#board{
+    display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+  }
+
+  .port-label, .stub-label{
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8.5px;
+    fill: #58606f;
+    letter-spacing: 0.12em;
+  }
+
+  .complete-overlay{
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(10,12,16,0.72);
+    backdrop-filter: blur(1px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s ease;
+  }
+  .complete-overlay.show{
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .stamp{
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 700;
+    font-size: 26px;
+    letter-spacing: 0.12em;
+    color: #3ddc84;
+    border: 3px solid #3ddc84;
+    padding: 10px 18px;
+    border-radius: 8px;
+    text-transform: uppercase;
+    transform: rotate(-6deg) scale(0.85);
+    opacity: 0;
+    text-shadow: 0 0 16px rgba(61,220,132,0.5);
+    box-shadow: 0 0 24px rgba(61,220,132,0.25);
+  }
+  .complete-overlay.show .stamp{
+    animation: stampIn 0.45s cubic-bezier(.2,1.5,.4,1) 0.1s forwards;
+  }
+  @keyframes stampIn{
+    0%{ opacity: 0; transform: rotate(-6deg) scale(1.6); }
+    60%{ opacity: 1; }
+    100%{ opacity: 1; transform: rotate(-6deg) scale(1); }
+  }
+
+  .footer{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 14px;
+  }
+  .hint{
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+  }
+  .hint b{ color: var(--text); font-weight: 600; }
+
+  .new-task{
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text);
+    background: linear-gradient(180deg, #333c4a, #232833);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 9px 14px;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 2px 0 rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08);
+    transition: transform 0.1s, background 0.15s;
+  }
+  .new-task:hover{ background: linear-gradient(180deg, #3a4453, #262c38); }
+  .new-task:active{ transform: translateY(1px); }
+  .new-task:focus-visible{ outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  .status-line{
+    text-align: center;
+    font-size: 9.5px;
+    color: var(--text-dim);
+    letter-spacing: 0.14em;
+    margin-top: 12px;
+    text-transform: uppercase;
+  }
+  .status-line b{ color: var(--accent); font-weight: 600; }
+
+  @media (prefers-reduced-motion: reduce){
+    .stamp, .complete-overlay, .led{ animation: none !important; transition: none !important; }
+  }
+
+  /* The board scales to whatever height is left, so on short screens
+     everything else gives way to it — a board squeezed to fit under a title
+     is too small to drag wires on. The station's task line sits just above. */
+  @media (max-height: 600px){
+    .stage-note, .bolt, .header, .footer{ display: none; }
+    body{ padding: 4px; }
+    .terminal{ padding: 8px; border-radius: 14px; }
+    .panel-strip{ margin-bottom: 6px; padding: 5px 10px; }
+    .status-line{ margin-top: 6px; }
+  }
+  @media (max-height: 340px){
+    .panel-strip, .status-line{ display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="stage-note">PROTOTYPE &mdash; DRAG-WIRE TASK</div>
+
+<div class="terminal" id="terminal">
+  <div class="bolt tl"></div>
+  <div class="bolt tr"></div>
+  <div class="bolt bl"></div>
+  <div class="bolt br"></div>
+
+  <div class="header">
+    <div class="eyebrow">Maintenance Terminal &middot; Bay 04</div>
+    <div class="title">Conduit Patch</div>
+    <div class="subtitle">Reconnect every severed line to its matching port</div>
+  </div>
+
+  <div class="panel-strip row">
+    <div class="difficulty" role="group" aria-label="Number of wires">
+      <span class="diff-label">Wires</span>
+      <button class="diff-btn" data-count="3" aria-pressed="false">3</button>
+      <button class="diff-btn" data-count="4" aria-pressed="false">4</button>
+      <button class="diff-btn" data-count="5" aria-pressed="true">5</button>
+      <button class="diff-btn" data-count="6" aria-pressed="false">6</button>
+    </div>
+    <div class="leds" id="leds" aria-hidden="true"></div>
+  </div>
+
+  <div class="board-wrap">
+    <svg id="board" viewBox="0 0 400 460" xmlns="http://www.w3.org/2000/svg">
+      <text x="34" y="26" class="stub-label" text-anchor="middle">CUT</text>
+      <text x="366" y="26" class="port-label" text-anchor="middle">PORT</text>
+    </svg>
+    <div class="complete-overlay" id="overlay">
+      <div class="stamp">Patch Complete</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="hint">Drag a stub to its <b>matching</b> port</div>
+    <button class="new-task" id="newTask">New Task</button>
+  </div>
+
+  <div class="status-line" id="statusLine">PATCHED <b>0</b> / 5</div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var SVG_NS = "http://www.w3.org/2000/svg";
+  var VB_W = 400, VB_H = 460;
+  var MARGIN_TOP = 56, MARGIN_BOT = 34;
+
+  var PALETTE = [
+    { name: "red",    hex: "#ff4d4f", shape: "circle"  },
+    { name: "amber",  hex: "#ffcf3f", shape: "triangle" },
+    { name: "sky",    hex: "#3fa9ff", shape: "square"  },
+    { name: "violet", hex: "#b46dff", shape: "diamond" },
+    { name: "mint",   hex: "#3ddc84", shape: "hex"     },
+    { name: "orange", hex: "#ff8c42", shape: "star"    }
+  ];
+
+  var board = document.getElementById("board");
+  var overlay = document.getElementById("overlay");
+  var ledsWrap = document.getElementById("leds");
+  var statusLine = document.getElementById("statusLine");
+  var terminal = document.getElementById("terminal");
+  var newTaskBtn = document.getElementById("newTask");
+  var diffBtns = Array.prototype.slice.call(document.querySelectorAll(".diff-btn"));
+
+  var wireCount = 5;
+  var wires = [];        // { id, hex, shape, leftY, rightY, connected }
+  var connections = 0;
+  var dragState = null;
+  var audioCtx = null;
+
+  function ensureAudio(){
+    if (audioCtx) return audioCtx;
+    try{
+      var AC = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AC();
+    }catch(e){ audioCtx = null; }
+    return audioCtx;
+  }
+
+  function beep(freqStart, freqEnd, duration, type, gainPeak){
+    var ctx = ensureAudio();
+    if (!ctx) return;
+    if (ctx.state === "suspended") ctx.resume();
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.type = type || "sine";
+    var now = ctx.currentTime;
+    osc.frequency.setValueAtTime(freqStart, now);
+    if (freqEnd !== undefined){
+      osc.frequency.linearRampToValueAtTime(freqEnd, now + duration);
+    }
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(gainPeak || 0.12, now + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + duration + 0.02);
+  }
+
+  function sfxConnect(){ beep(420, 780, 0.11, "sine", 0.14); }
+  function sfxError(){ beep(160, 90, 0.18, "sawtooth", 0.10); }
+  function sfxComplete(){
+    beep(520, 520, 0.09, "sine", 0.12);
+    setTimeout(function(){ beep(660, 660, 0.09, "sine", 0.12); }, 90);
+    setTimeout(function(){ beep(880, 880, 0.20, "sine", 0.14); }, 180);
+  }
+
+  function shuffle(arr){
+    for (var i = arr.length - 1; i > 0; i--){
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+    }
+    return arr;
+  }
+
+  function svgEl(tag, attrs){
+    var el = document.createElementNS(SVG_NS, tag);
+    for (var k in attrs){ el.setAttribute(k, attrs[k]); }
+    return el;
+  }
+
+  // Small glyph paths centered at (0,0) with roughly r=1 radius, scaled by caller.
+  function shapePath(shape, r){
+    switch(shape){
+      case "triangle": {
+        var h = r * 1.15;
+        return "M 0 " + (-h) + " L " + (h*0.95) + " " + (h*0.75) + " L " + (-h*0.95) + " " + (h*0.75) + " Z";
+      }
+      case "square": {
+        var s = r * 0.82;
+        return "M " + (-s) + " " + (-s) + " L " + s + " " + (-s) + " L " + s + " " + s + " L " + (-s) + " " + s + " Z";
+      }
+      case "diamond": {
+        return "M 0 " + (-r) + " L " + r + " 0 L 0 " + r + " L " + (-r) + " 0 Z";
+      }
+      case "hex": {
+        var pts = [];
+        for (var i = 0; i < 6; i++){
+          var a = Math.PI / 180 * (60 * i - 90);
+          pts.push((r * Math.cos(a)).toFixed(2) + " " + (r * Math.sin(a)).toFixed(2));
+        }
+        return "M " + pts.join(" L ") + " Z";
+      }
+      case "star": {
+        var spts = [];
+        for (var s2 = 0; s2 < 10; s2++){
+          var rad = (s2 % 2 === 0) ? r : r * 0.42;
+          var ang = Math.PI / 180 * (36 * s2 - 90);
+          spts.push((rad * Math.cos(ang)).toFixed(2) + " " + (rad * Math.sin(ang)).toFixed(2));
+        }
+        return "M " + spts.join(" L ") + " Z";
+      }
+      default: return null; // circle handled separately
+    }
+  }
+
+  function addGlyph(parent, cx, cy, hex, shape, r, opts){
+    opts = opts || {};
+    var g = svgEl("g", { transform: "translate(" + cx + "," + cy + ")" });
+    if (shape === "circle"){
+      g.appendChild(svgEl("circle", {
+        r: r, fill: opts.fillNone ? "none" : hex,
+        stroke: hex, "stroke-width": opts.strokeWidth || 2
+      }));
+    } else {
+      g.appendChild(svgEl("path", {
+        d: shapePath(shape, r),
+        fill: opts.fillNone ? "none" : hex,
+        stroke: hex, "stroke-width": opts.strokeWidth || 2,
+        "stroke-linejoin": "round"
+      }));
+    }
+    parent.appendChild(g);
+    return g;
+  }
+
+  function layoutY(index, count){
+    if (count === 1) return (MARGIN_TOP + (VB_H - MARGIN_BOT)) / 2;
+    var span = (VB_H - MARGIN_BOT) - MARGIN_TOP;
+    return MARGIN_TOP + (span * index) / (count - 1);
+  }
+
+  function clientToSvgPoint(clientX, clientY){
+    var pt = board.createSVGPoint();
+    pt.x = clientX; pt.y = clientY;
+    var ctm = board.getScreenCTM();
+    if (!ctm) return { x: 0, y: 0 };
+    var loc = pt.matrixTransform(ctm.inverse());
+    return { x: loc.x, y: loc.y };
+  }
+
+  function buildLeds(){
+    ledsWrap.innerHTML = "";
+    wires.forEach(function(w){
+      var d = document.createElement("div");
+      d.className = "led";
+      d.style.setProperty("--lc", w.hex);
+      d.dataset.id = w.id;
+      ledsWrap.appendChild(d);
+    });
+  }
+
+  function updateLed(id, lit){
+    var el = ledsWrap.querySelector('[data-id="' + id + '"]');
+    if (el) el.classList.toggle("lit", lit);
+  }
+
+  function updateStatus(){
+    statusLine.innerHTML = "PATCHED <b>" + connections + "</b> / " + wireCount;
+  }
+
+  function clearBoard(){
+    while (board.lastChild){
+      // keep nothing; rebuild everything each round for simplicity
+      board.removeChild(board.lastChild);
+    }
+  }
+
+  function newRound(){
+    connections = 0;
+    overlay.classList.remove("show");
+    updateStatus();
+
+    var chosen = shuffle(PALETTE.slice()).slice(0, wireCount);
+    var leftOrder = chosen.map(function(c, i){ return { id: i, hex: c.hex, shape: c.shape }; });
+    var rightOrder = shuffle(leftOrder.slice());
+
+    wires = leftOrder.map(function(w, i){
+      return {
+        id: w.id,
+        hex: w.hex,
+        shape: w.shape,
+        leftY: layoutY(i, wireCount),
+        rightY: layoutY(rightOrder.findIndex(function(r){ return r.id === w.id; }), wireCount),
+        connected: false
+      };
+    });
+
+    buildLeds();
+
+    clearBoard();
+    board.appendChild(svgEl("text", { x: 34, y: 20, class: "stub-label", "text-anchor": "middle" })).textContent = "CUT";
+    board.appendChild(svgEl("text", { x: 366, y: 20, class: "port-label", "text-anchor": "middle" })).textContent = "PORT";
+
+    var lockedLayer = svgEl("g", { id: "lockedLayer" });
+    var dragLayer = svgEl("g", { id: "dragLayer" });
+    board.appendChild(lockedLayer);
+
+    wires.forEach(function(w){
+      // left frayed stub: wire running off the panel edge into the peg
+      var stub = svgEl("path", {
+        d: "M -6 " + w.leftY + " L 34 " + w.leftY,
+        stroke: w.hex, "stroke-width": 9, "stroke-linecap": "round",
+        opacity: 0.9
+      });
+      board.appendChild(stub);
+      // insulation clamp
+      board.appendChild(svgEl("rect", {
+        x: 12, y: w.leftY - 6, width: 9, height: 12, rx: 2,
+        fill: "#12151b", opacity: 0.55
+      }));
+
+      var pegHit = svgEl("circle", {
+        cx: 34, cy: w.leftY, r: 20, fill: "transparent",
+        "data-role": "peg", "data-id": w.id, style: "cursor:grab"
+      });
+      var pegRing = svgEl("circle", {
+        cx: 34, cy: w.leftY, r: 13, fill: "#0b0e13",
+        stroke: w.hex, "stroke-width": 3
+      });
+      board.appendChild(pegRing);
+      addGlyph(board, 34, w.leftY, w.hex, w.shape, 6);
+      board.appendChild(pegHit);
+
+      // right port
+      var portRing = svgEl("circle", {
+        cx: 366, cy: w.rightY, r: 15, fill: "#0b0e13",
+        stroke: w.hex, "stroke-width": 3, "stroke-dasharray": "2 3",
+        opacity: 0.85, "data-role": "portring", "data-id": w.id
+      });
+      board.appendChild(portRing);
+      addGlyph(board, 366, w.rightY, w.hex, w.shape, 6, { fillNone: true, strokeWidth: 1.6 });
+
+      var portHit = svgEl("circle", {
+        cx: 366, cy: w.rightY, r: 22, fill: "transparent",
+        "data-role": "port", "data-id": w.id
+      });
+      board.appendChild(portHit);
+    });
+
+    board.appendChild(dragLayer);
+    attachHandlers();
+  }
+
+  function sagPath(x1, y1, x2, y2, sagOverride){
+    var mx = (x1 + x2) / 2;
+    var my = (y1 + y2) / 2;
+    var dist = Math.hypot(x2 - x1, y2 - y1);
+    var sag = sagOverride !== undefined ? sagOverride : Math.min(46, dist * 0.16 + 8);
+    return "M " + x1 + " " + y1 + " Q " + mx + " " + (my + sag) + " " + x2 + " " + y2;
+  }
+
+  function lockWire(id){
+    var w = wires[id];
+    w.connected = true;
+    connections++;
+    var lockedLayer = document.getElementById("lockedLayer");
+
+    var glow = svgEl("path", {
+      d: sagPath(34, w.leftY, 366, w.rightY, 30),
+      stroke: w.hex, "stroke-width": 14, "stroke-linecap": "round",
+      fill: "none", opacity: 0.25
+    });
+    var main = svgEl("path", {
+      d: sagPath(34, w.leftY, 366, w.rightY, 30),
+      stroke: w.hex, "stroke-width": 8, "stroke-linecap": "round",
+      fill: "none"
+    });
+    var shine = svgEl("path", {
+      d: sagPath(34, w.leftY, 366, w.rightY, 30),
+      stroke: "rgba(255,255,255,0.35)", "stroke-width": 2, "stroke-linecap": "round",
+      fill: "none"
+    });
+    lockedLayer.appendChild(glow);
+    lockedLayer.appendChild(main);
+    lockedLayer.appendChild(shine);
+
+    var portRing = board.querySelector('[data-role="portring"][data-id="' + id + '"]');
+    if (portRing){
+      portRing.setAttribute("stroke-dasharray", "");
+      portRing.setAttribute("opacity", "1");
+    }
+    var peg = board.querySelector('[data-role="peg"][data-id="' + id + '"]');
+    if (peg) peg.style.cursor = "default";
+    var port = board.querySelector('[data-role="port"][data-id="' + id + '"]');
+    if (port) port.style.pointerEvents = "none";
+
+    updateLed(id, true);
+    updateStatus();
+    sfxConnect();
+
+    if (connections >= wireCount){
+      setTimeout(function(){
+        overlay.classList.add("show");
+        sfxComplete();
+      }, 220);
+      setTimeout(function(){
+        try{
+          if (window.parent && window.parent !== window){
+            window.parent.postMessage({ type: "task-complete", task: "conduit-patch" }, "*");
+          }
+        }catch(e){}
+      }, 1400);
+    }
+  }
+
+  function flashError(cx, cy){
+    var ring = svgEl("circle", {
+      cx: cx, cy: cy, r: 22, fill: "none",
+      stroke: "#ff5252", "stroke-width": 4, opacity: 0.9
+    });
+    board.appendChild(ring);
+    sfxError();
+    if (terminal && !window.matchMedia("(prefers-reduced-motion: reduce)").matches){
+      terminal.animate(
+        [{ transform: "translateX(0)" }, { transform: "translateX(-4px)" },
+         { transform: "translateX(4px)" }, { transform: "translateX(0)" }],
+        { duration: 180, easing: "ease-in-out" }
+      );
+    }
+    var start = null;
+    function fade(ts){
+      if (!start) start = ts;
+      var t = (ts - start) / 260;
+      if (t >= 1){ ring.remove(); return; }
+      ring.setAttribute("opacity", (0.9 * (1 - t)).toFixed(2));
+      ring.setAttribute("r", 22 + t * 10);
+      requestAnimationFrame(fade);
+    }
+    requestAnimationFrame(fade);
+  }
+
+  function attachHandlers(){
+    var pegs = board.querySelectorAll('[data-role="peg"]');
+    pegs.forEach(function(peg){
+      peg.addEventListener("pointerdown", onPegDown);
+    });
+  }
+
+  function onPegDown(e){
+    var id = parseInt(e.currentTarget.dataset.id, 10);
+    var w = wires[id];
+    if (!w || w.connected) return;
+    ensureAudio();
+    e.preventDefault();
+
+    var dragLayer = document.getElementById("dragLayer");
+    var tempPath = svgEl("path", {
+      d: sagPath(34, w.leftY, 34, w.leftY, 0),
+      stroke: w.hex, "stroke-width": 8, "stroke-linecap": "round", fill: "none",
+      opacity: 0.95
+    });
+    dragLayer.appendChild(tempPath);
+
+    dragState = { id: id, path: tempPath };
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+  }
+
+  function onPointerMove(e){
+    if (!dragState) return;
+    var w = wires[dragState.id];
+    var p = clientToSvgPoint(e.clientX, e.clientY);
+    px_clamp(p);
+    dragState.path.setAttribute("d", sagPath(34, w.leftY, p.x, p.y));
+    dragState.lastPoint = p;
+  }
+
+  function px_clamp(p){
+    p.x = Math.max(0, Math.min(VB_W, p.x));
+    p.y = Math.max(0, Math.min(VB_H, p.y));
+  }
+
+  function onPointerUp(e){
+    if (!dragState) return;
+    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener("pointerup", onPointerUp);
+
+    var w = wires[dragState.id];
+    var p = dragState.lastPoint || { x: 34, y: w.leftY };
+    var best = null, bestDist = Infinity;
+
+    wires.forEach(function(other){
+      if (other.connected) return;
+      var d = Math.hypot(other.rightY - p.y, 366 - p.x);
+      if (d < bestDist){ bestDist = d; best = other; }
+    });
+
+    dragState.path.remove();
+
+    if (best && bestDist < 30){
+      if (best.id === dragState.id){
+        lockWire(dragState.id);
+      } else {
+        flashError(366, best.rightY);
+      }
+    }
+    dragState = null;
+  }
+
+  function setWireCount(n){
+    wireCount = n;
+    diffBtns.forEach(function(b){
+      b.setAttribute("aria-pressed", String(parseInt(b.dataset.count, 10) === n));
+    });
+    newRound();
+  }
+
+  diffBtns.forEach(function(b){
+    b.addEventListener("click", function(){
+      setWireCount(parseInt(b.dataset.count, 10));
+    });
+  });
+
+  newTaskBtn.addEventListener("click", function(){
+    ensureAudio();
+    newRound();
+  });
+
+  // init
+  setWireCount(5);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en" class="task-page">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Power Cycle</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  body{ touch-action: none; }
+  .charge-ring{
+    --size: min(220px, calc(100vh - 200px));
+    width: var(--size); height: var(--size); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: conic-gradient(var(--good) calc(var(--pct, 0) * 1%), var(--seam) 0);
+    box-shadow: inset 0 0 0 10px var(--plate-lo), 0 10px 30px -10px rgba(0,0,0,0.6);
+    margin: 8px auto;
+    transition: background 0.05s linear;
+  }
+  @media (max-height: 470px){
+    .charge-ring{ --size: min(220px, calc(100vh - 116px)); }
+    .panel > .hint{ display: none; }
+  }
+  .charge-ring .inner{
+    width: 82%; height: 82%; border-radius: 50%;
+    background: var(--plate);
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .charge-num{ font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: min(44px, 13vh); }
+  .hold-btn{
+    width: 100%; padding: 20px; font-size: 15px; touch-action: none;
+    background: linear-gradient(180deg, #ffc861, var(--accent));
+    color: #241a05; border-color: #a5760f;
+  }
+  .hold-btn.holding{ filter: brightness(1.15); }
+  .done-banner{
+    text-align: center; font-family: 'Rajdhani', sans-serif; font-weight: 700;
+    font-size: 22px; color: var(--good); margin-top: 14px; display: none;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">Maintenance Task</div>
+  <h1 class="title">Power Cycle</h1>
+  <div class="panel">
+    <p class="hint center">Press and hold to charge the capacitor. Don't let go until it's full.</p>
+    <div class="charge-ring" id="ring" style="--pct:0">
+      <div class="inner"><div class="charge-num" id="pctText">0%</div></div>
+    </div>
+    <button class="hold-btn" id="holdBtn">HOLD TO CHARGE</button>
+    <div class="done-banner" id="doneBanner">CHARGE COMPLETE</div>
+  </div>
+</div>
+<script>
+  var ring = document.getElementById("ring");
+  var pctText = document.getElementById("pctText");
+  var btn = document.getElementById("holdBtn");
+  var doneBanner = document.getElementById("doneBanner");
+
+  var charge = 0;
+  var holding = false;
+  var done = false;
+  var FILL_RATE = 100 / 3.6; // percent per second while holding
+  var DRAIN_RATE = 100 / 1.2; // percent per second while released
+  var last = null;
+
+  function frame(ts){
+    if (done) return;
+    if (last === null) last = ts;
+    var dt = (ts - last) / 1000;
+    last = ts;
+    charge += (holding ? FILL_RATE : -DRAIN_RATE) * dt;
+    charge = Math.max(0, Math.min(100, charge));
+    ring.style.setProperty("--pct", charge.toFixed(1));
+    pctText.textContent = Math.round(charge) + "%";
+    if (charge >= 100){
+      complete();
+      return;
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function start(e){
+    e.preventDefault();
+    holding = true;
+    btn.classList.add("holding");
+    btn.textContent = "HOLDING…";
+  }
+  function stop(){
+    holding = false;
+    btn.classList.remove("holding");
+    btn.textContent = "HOLD TO CHARGE";
+  }
+
+  btn.addEventListener("pointerdown", start);
+  window.addEventListener("pointerup", stop);
+  window.addEventListener("pointercancel", stop);
+
+  requestAnimationFrame(frame);
+
+  function complete(){
+    done = true;
+    btn.style.display = "none";
+    doneBanner.style.display = "block";
+    setTimeout(function(){
+      try{
+        if (window.parent && window.parent !== window){
+          window.parent.postMessage({ type: "task-complete", task: "power-cycle" }, "*");
+        }
+      }catch(e){}
+    }, 900);
+  }
+</script>
+</body>
+</html>

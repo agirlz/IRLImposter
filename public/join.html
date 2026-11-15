@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IRL Imposter — Join</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">IRL Imposter</div>
+  <h1 class="title">Connecting…</h1>
+
+  <section class="panel">
+    <p class="hint">This station sets itself up automatically — no room to pick.</p>
+  </section>
+</div>
+
+<script>
+  // Sections are auto-assigned server-side now, so there's nothing left for
+  // this page to ask — it's just a forwarding stop for any old link that
+  // still points here. New links should go straight to /station.html.
+  window.location.replace("/station.html" + window.location.search);
+</script>
+</body>
+</html>

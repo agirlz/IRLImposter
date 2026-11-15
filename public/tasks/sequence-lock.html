@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en" class="task-page">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sequence Lock</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  .pad-grid{
+    display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 10px;
+    margin: 8px 0;
+  }
+  .pad{
+    min-height: 0; padding: 0; border-radius: 16px; border: 2px solid rgba(255,255,255,0.08);
+    cursor: pointer; transition: filter 0.1s, transform 0.1s;
+    filter: brightness(0.55) saturate(0.7);
+  }
+  .pad.lit{ filter: brightness(1.25) saturate(1.1); transform: scale(0.97); }
+  .pad:disabled{ cursor: default; }
+  .pad-red{ background: #ff4d4f; }
+  .pad-amber{ background: #ffcf3f; }
+  .pad-sky{ background: #3fa9ff; }
+  .pad-mint{ background: #3ddc84; }
+  .lock-status{ text-align: center; font-size: 12px; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; }
+  .done-banner{
+    text-align: center; font-family: 'Rajdhani', sans-serif; font-weight: 700;
+    font-size: 22px; color: var(--good); margin-top: 10px; display: none;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">Maintenance Task</div>
+  <h1 class="title">Sequence Lock</h1>
+  <div class="panel">
+    <p class="hint center">Watch the pattern, then repeat it in order.</p>
+    <div class="pad-grid grow">
+      <button class="pad pad-red" data-i="0"></button>
+      <button class="pad pad-amber" data-i="1"></button>
+      <button class="pad pad-sky" data-i="2"></button>
+      <button class="pad pad-mint" data-i="3"></button>
+    </div>
+    <div class="lock-status" id="statusText">Watch closely…</div>
+    <div class="done-banner" id="doneBanner">LOCK RELEASED</div>
+  </div>
+</div>
+<script>
+  var pads = Array.prototype.slice.call(document.querySelectorAll(".pad"));
+  var statusText = document.getElementById("statusText");
+  var doneBanner = document.getElementById("doneBanner");
+  var SEQ_LEN = 4;
+  var FREQS = [220, 277, 330, 415];
+  var sequence = [];
+  var playerIndex = 0;
+  var accepting = false;
+  var audioCtx = null;
+
+  function beep(freq){
+    try{
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!audioCtx) audioCtx = new AC();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      var osc = audioCtx.createOscillator();
+      var gain = audioCtx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      var now = audioCtx.currentTime;
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.linearRampToValueAtTime(0.15, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.3);
+    }catch(e){}
+  }
+
+  function lightPad(i, ms){
+    return new Promise(function(resolve){
+      pads[i].classList.add("lit");
+      beep(FREQS[i]);
+      setTimeout(function(){
+        pads[i].classList.remove("lit");
+        setTimeout(resolve, 140);
+      }, ms);
+    });
+  }
+
+  function newSequence(){
+    sequence = [];
+    for (var i = 0; i < SEQ_LEN; i++) sequence.push(Math.floor(Math.random() * 4));
+    playSequence();
+  }
+
+  async function playSequence(){
+    accepting = false;
+    setPadsEnabled(false);
+    statusText.textContent = "Watch closely…";
+    await new Promise(function(r){ setTimeout(r, 500); });
+    for (var i = 0; i < sequence.length; i++){
+      await lightPad(sequence[i], 480);
+    }
+    playerIndex = 0;
+    accepting = true;
+    setPadsEnabled(true);
+    statusText.textContent = "Your turn — repeat it";
+  }
+
+  function setPadsEnabled(on){
+    pads.forEach(function(p){ p.disabled = !on; });
+  }
+
+  function onPadPress(i){
+    if (!accepting) return;
+    pads[i].classList.add("lit");
+    beep(FREQS[i]);
+    setTimeout(function(){ pads[i].classList.remove("lit"); }, 180);
+
+    if (i === sequence[playerIndex]){
+      playerIndex++;
+      if (playerIndex >= sequence.length){
+        accepting = false;
+        setPadsEnabled(false);
+        complete();
+      }
+    } else {
+      accepting = false;
+      setPadsEnabled(false);
+      statusText.textContent = "Not quite — watch again";
+      setTimeout(playSequence, 700);
+    }
+  }
+
+  pads.forEach(function(p){
+    p.addEventListener("click", function(){ onPadPress(parseInt(p.dataset.i, 10)); });
+  });
+
+  newSequence();
+
+  function complete(){
+    statusText.style.display = "none";
+    doneBanner.style.display = "block";
+    setTimeout(function(){
+      try{
+        if (window.parent && window.parent !== window){
+          window.parent.postMessage({ type: "task-complete", task: "sequence-lock" }, "*");
+        }
+      }catch(e){}
+    }, 900);
+  }
+</script>
+</body>
+</html>

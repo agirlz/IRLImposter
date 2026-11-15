@@ -1,0 +1,252 @@
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root{
+  --stage: #12151b;
+  --plate: #1f2530;
+  --plate-hi: #2a3140;
+  --plate-lo: #171b23;
+  --seam: #0a0c10;
+  --metal: #4a5568;
+  --metal-lit: #8a94a6;
+  --text: #dde3ea;
+  --text-dim: #8791a1;
+  --accent: #ffb020;
+  --good: #3ddc84;
+  --bad: #ff5252;
+  --focus: #6cc7ff;
+}
+
+*{ box-sizing: border-box; }
+
+/* Any element toggled with the native `hidden` attribute must actually stay
+   hidden, even if some class rule on it also sets its own `display` value
+   (flex/grid/block/etc.) — author CSS normally beats the browser's default
+   [hidden]{display:none} regardless of specificity, so without this rule
+   any hide()/show() toggle on such an element silently does nothing and it
+   stays visible forever. This one rule covers every element, present and
+   future, instead of requiring a one-off [hidden] override per class. */
+[hidden]{ display: none !important; }
+
+html, body{
+  background: var(--stage);
+  color: var(--text);
+  margin: 0;
+  min-height: 100%;
+  /* Nothing in this app is meant to be text-selected or copy/pasted — every
+     screen is buttons, keypads, and drag/hold mini-games. Without this, a
+     long-press on any button (most importantly the Power Cycle "HOLD TO
+     CHARGE" button and similar hold/drag task controls) can trigger the
+     browser's native text-selection handles and Select All/Copy/Cut menu
+     instead of registering as a hold, which is exactly the bug James hit —
+     had to press right at the very edge of the button, away from any text,
+     for it to register. This one rule, inherited by every element on every
+     page (including every task iframe, since they share this stylesheet),
+     fixes it everywhere at once rather than needing a per-button patch. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+body{
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  background: radial-gradient(ellipse 1000px 700px at 50% 0%, #1b212b 0%, var(--stage) 62%);
+  padding: 20px 14px 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.wrap{ width: 100%; max-width: 460px; }
+
+.eyebrow{
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  color: var(--accent);
+  text-transform: uppercase;
+  text-align: center;
+  opacity: 0.85;
+}
+
+h1.title{
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  font-size: 28px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: center;
+  margin: 2px 0 18px;
+  text-wrap: balance;
+}
+
+.panel{
+  background: linear-gradient(155deg, var(--plate-hi), var(--plate) 40%, var(--plate-lo) 100%);
+  border-radius: 18px;
+  padding: 18px 16px;
+  border: 1px solid #0d1015;
+  box-shadow: 0 20px 40px -18px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04);
+  margin-bottom: 14px;
+}
+
+.panel h2{
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 600;
+  font-size: 18px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 0 0 10px;
+  color: var(--accent);
+}
+
+label{
+  display: block;
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+input[type="text"], input[type="tel"]{
+  width: 100%;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 16px;
+  background: var(--seam);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 11px 12px;
+  outline: none;
+}
+input:focus-visible{ outline: 2px solid var(--focus); outline-offset: 1px; }
+
+button{
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text);
+  background: linear-gradient(180deg, #333c4a, #232833);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 9px;
+  padding: 12px 16px;
+  cursor: pointer;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08);
+  transition: transform 0.08s, background 0.15s, opacity 0.15s;
+}
+button:hover{ background: linear-gradient(180deg, #3a4453, #262c38); }
+button:active{ transform: translateY(1px); }
+button:disabled{ opacity: 0.45; cursor: default; }
+button:focus-visible{ outline: 2px solid var(--focus); outline-offset: 2px; }
+
+button.primary{
+  background: linear-gradient(180deg, #ffc861, var(--accent));
+  color: #241a05;
+  border-color: #a5760f;
+}
+button.primary:hover{ background: linear-gradient(180deg, #ffd27a, #ffbb33); }
+
+button.danger{
+  background: linear-gradient(180deg, #ff7a7a, var(--bad));
+  color: #2a0505;
+  border-color: #a52a2a;
+}
+
+button.block{ width: 100%; }
+
+.row{ display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.stack{ display: flex; flex-direction: column; gap: 10px; }
+
+.pill{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--seam);
+  color: var(--text-dim);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.pill .dot{ width: 7px; height: 7px; border-radius: 50%; background: var(--text-dim); }
+.pill.alive .dot{ background: var(--good); box-shadow: 0 0 6px var(--good); }
+.pill.dead .dot{ background: var(--bad); }
+.pill.dead{ opacity: 0.55; text-decoration: line-through; }
+
+.player-list{ list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.player-list li{
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--seam); border-radius: 8px; padding: 9px 12px;
+  font-size: 13px;
+}
+
+.task-list{ list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.task-list li{
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: var(--seam); border-radius: 10px; padding: 12px;
+}
+.task-list .task-name{ font-family: 'Rajdhani', sans-serif; font-weight: 600; font-size: 15px; letter-spacing: 0.02em; }
+.task-list .task-hint{ font-size: 10.5px; color: var(--text-dim); margin-top: 2px; }
+.task-list li.done{ opacity: 0.5; }
+.task-list li.done .task-name{ text-decoration: line-through; }
+
+.progress-bar{
+  height: 10px; border-radius: 6px; background: var(--seam); overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.6);
+}
+.progress-bar > div{ height: 100%; background: linear-gradient(90deg, var(--good), #6ee8a6); transition: width 0.4s ease; }
+
+.hint{ font-size: 11.5px; color: var(--text-dim); line-height: 1.5; }
+.center{ text-align: center; }
+.mt{ margin-top: 14px; }
+.big-number{
+  font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 40px;
+  text-align: center; letter-spacing: 0.04em;
+}
+
+.overlay{
+  position: fixed; inset: 0; background: rgba(8,10,14,0.88);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+  z-index: 50;
+}
+.overlay[hidden]{ display: none; }
+.overlay .panel{ width: 100%; max-width: 420px; margin-bottom: 0; }
+
+.countdown{
+  font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 52px;
+  text-align: center; color: var(--accent); text-shadow: 0 0 20px rgba(255,176,32,0.35);
+  font-variant-numeric: tabular-nums;
+}
+
+.siren{
+  animation: sirenFlash 1s steps(2, start) infinite;
+}
+@keyframes sirenFlash{
+  0%, 49%{ background-color: rgba(255,82,82,0.18); }
+  50%, 100%{ background-color: rgba(255,82,82,0.02); }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .siren{ animation: none; background-color: rgba(255,82,82,0.12); }
+}
+
+/* --- Task mini-games (html.task-page) ---
+   These run in an iframe whose height depends on the device, and several
+   block touch-scrolling because they're drag/hold games, so anything below
+   the fold would be unreachable. Each game fills the iframe exactly instead:
+   no scrolling, a .grow element takes whatever height is left, and the title
+   gives way on short screens (the station's own task line is right above it).
+   Viewport units inside an iframe mean the iframe's size, so a game's own
+   sizing and these breakpoints follow the space it's actually been given. */
+.task-page, .task-page body{ height: 100%; overflow: hidden; }
+.task-page body{ min-height: 0; padding: 8px; justify-content: center; }
+.task-page .wrap{ flex: 1 1 auto; min-height: 0; max-height: 560px; display: flex; flex-direction: column; }
+.task-page .title{ margin-bottom: 8px; }
+.task-page .panel{ flex: 1 1 auto; min-height: 0; margin-bottom: 0; padding: 12px; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
+.task-page .panel > *{ flex: none; }
+.task-page .panel > .grow{ flex: 1 1 auto; min-height: 0; }
+@media (max-height: 470px){
+  .task-page .eyebrow, .task-page .title{ display: none; }
+}
